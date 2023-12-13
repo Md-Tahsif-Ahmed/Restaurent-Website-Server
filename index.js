@@ -4,6 +4,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 dotenv.config();
 const app = express();
+const jwt = require('jsonwebtoken');
 const port = process.env.PORT || 3000;
 
 // Middleware
@@ -52,7 +53,24 @@ async function connectMongoDB() {
       const result = await userCollection.insertOne(user);
       res.send(result);
     })
-
+    app.patch('/user/admin/:id', async (req, res)=>{
+      const id = req.params.id;
+      const filter = {_id: new ObjectId(id)};
+      const updatedDoc = {
+        $set: {
+          role: 'admin'
+        }
+      }
+      const result = await userCollection.updateOne(filter, updatedDoc);
+      res.send(result);
+    })
+    app.delete('/user/:id', async (req, res)=>{
+      const id = req.params.id;
+      const query = {_id: new ObjectId(id)};
+      const result = await userCollection.deleteOne(query);
+      res.send(result);
+    })
+// cart releted
     app.get('/cart', async (req, res)=>{
       const email = req.query.email;
       const query = { email: email };
