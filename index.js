@@ -5,6 +5,7 @@ const dotenv = require('dotenv');
 dotenv.config();
 const app = express();
 const jwt = require('jsonwebtoken');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
 const port = process.env.PORT || 3000;
 
 // Middleware
@@ -37,6 +38,7 @@ async function connectMongoDB() {
     const menuCollection = client.db(resDB).collection("menu");
     const reviewsCollection = client.db(resDB).collection("reviews");
     const cartCollection = client.db(resDB).collection("cart");
+    const paymentCollection = client.db(resDB).collection("payment");
 // jwt releted
 // app.use((req, res, next) => {
 //   console.log(req.headers);
@@ -192,6 +194,53 @@ const verifyAdmin = async(req, res, next)=>{
       const result = await cartCollection.deleteOne(query);
       res.send(result);
     })
+
+     // payment intent
+     app.post('/create-payment-intent', async (req, res) => {
+      const { price } = req.body;
+      const amount = parseInt(price * 100);
+      console.log(amount, 'amount inside the intent')
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: 'usd',
+        payment_method_types: ['card']
+      });
+
+      console.log('Client Secret:', paymentIntent.client_secret);
+      res.send({
+          clientSecret: paymentIntent.client_secret
+      });
+    });
+
+    app.get('/payments/:email', verifyToken, async (req, res) => {
+      const query = { email: req.params.email }
+      if (req.params.email !== req.decoded.email) {
+        return res.status(403).send({ message: 'forbidden access' });
+      }
+      const result = await paymentCollection.find(query).toArray();
+      res.send(result);
+    })
+
+    app.post('/payments', async (req, res) => {
+      const payment = req.body;
+      const paymentResult = await paymentCollection.insertOne(payment);
+
+      //  carefully delete each item from the cart
+      console.log('payment info', payment);
+      const query = {
+        _id: {
+          $in: payment.cartIds.map(id => new ObjectId(id))
+        }
+      };
+
+      const deleteResult = await cartCollection.deleteMany(query);
+
+      res.send({ paymentResult, deleteResult });
+    })
+
+  
+
 
     // Start the server
     app.listen(port, () => {
